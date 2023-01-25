@@ -444,7 +444,7 @@ static inline NSString* getOutputDeviceLogForTestClass(NSString *directory, NSSt
 
 - (id)_XCT_terminateProcess:(id)token {
     NSError *error = nil;
-    if (kill(self.appProcessPID, SIGINT) != 0) {
+    if (kill(self.appProcessPID, SIGKILL) != 0) {
         error = [[NSError alloc] initWithDomain:NSPOSIXErrorDomain
                                            code:errno userInfo:nil];
     }
