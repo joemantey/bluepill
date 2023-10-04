@@ -57,6 +57,7 @@
 @property (nonatomic, assign) pid_t appProcessPID;
 @property (nonatomic, nullable) NSTask *recordVideoTask;
 @property (nonatomic, nullable) NSString *videoFileName;
+@property (nonatomic, nullable) NSTask *recordDeviceLogsTask;
 
 
 
@@ -183,6 +184,7 @@
         [connection registerDisconnectHandler:^{
             // This is called when the task is abruptly terminated (e.g. if the test times out)
             [self stopVideoRecording:YES];
+            [self stopDeviceLogRecording:YES];
             [BPUtils printInfo:INFO withString:@"DTXConnection disconnected."];
             self.disconnected = YES;
         }];
@@ -301,6 +303,59 @@ static inline NSString* getVideoPath(NSString *directory, NSString *testClass, N
     self.recordVideoTask = nil;
 }
 
+#pragma mark - Device Log Recording
+
+- (BOOL)shouldRecordDeviceLog {
+    return self.context.config.outputDirectory != nil;
+}
+
+static inline NSString* getOutputDeviceLogForTestClass(NSString *directory, NSString *testClass, NSString *method, NSInteger attemptNumber) {
+    return [NSString stringWithFormat:@"%@/%@__%@__%ld_system.log", directory, testClass, method, (long)attemptNumber];
+}
+
+- (void)startDeviceLogRecordingForTestClass:(NSString *)testClass method:(NSString *)method {
+    [self stopDeviceLogRecording:YES];
+    NSString *deviceLogForTestPath = getOutputDeviceLogForTestClass(self.context.config.outputDirectory, testClass, method, self.context.attemptNumber);
+    NSString *command = [NSString stringWithFormat:@"xcrun simctl spawn %@ log stream --style compact --process PinterestDevelopmentEG2 > %@", [self.simulator UDID], deviceLogForTestPath];
+    NSTask *task = [BPUtils buildShellTaskForCommand:command];
+    self.recordDeviceLogsTask = task;
+    [task launch];
+    [BPUtils printInfo:INFO withString:@"Started recording device logs to %@", deviceLogForTestPath];
+    [BPUtils printInfo:DEBUGINFO withString:@"Started recording device with pid %d and command: %@",  [task processIdentifier], [BPUtils getCommandStringForTask:task]];
+}
+
+- (void)stopDeviceLogRecording:(BOOL)forced {
+    NSTask *task = self.recordDeviceLogsTask;
+    if (task == nil) {
+        if (!forced) {
+            [BPUtils printInfo:ERROR withString: @"Tried to end device log task normally, but there was no task."];
+        }
+        return;
+    }
+
+    if (forced) {
+        [BPUtils printInfo:ERROR withString: @"Found dangling device log recording task. Stopping it."];
+    }
+
+    if (![task isRunning]) {
+        [BPUtils printInfo:ERROR withString:@"Device log task exists but it was not running!"];
+    } else {
+        [BPUtils printInfo:INFO withString:@"Stopping device log recording."];
+        [BPUtils printInfo:DEBUGINFO withString:@"Stopping device log recording task with pid %d and command: %@", [task processIdentifier], [BPUtils getCommandStringForTask:task]];
+        [task interrupt];
+        [task waitUntilExit];
+    }
+
+
+    NSString *filePath = [[task arguments].lastObject componentsSeparatedByString:@" "].lastObject;
+    if (![[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+        [BPUtils printInfo:ERROR withString:@"Device log recording file missing, expected at path %@!", filePath];
+    }
+
+    self.recordDeviceLogsTask = nil;
+}
+
+
 
 #pragma mark - XCTMessagingChannel_RunnerToIDE
 #pragma mark XCTMessagingRole_DebugLogging
@@ -413,6 +468,10 @@ static inline NSString* getVideoPath(NSString *directory, NSString *testClass, N
             }
         }
     }
+    
+    if ([self shouldRecordDeviceLog]) {
+        [self stopDeviceLogRecording:NO];
+    }
     return nil;
 }
 
@@ -430,6 +489,10 @@ static inline NSString* getVideoPath(NSString *directory, NSString *testClass, N
     if ([self shouldRecordVideo]) {
         [self startVideoRecordingForTestClass:testClass method:method];
     }
+    
+    if ([self shouldRecordDeviceLog]) {
+            [self startDeviceLogRecordingForTestClass:testClass method:method];
+        }
     return nil;
 }
 
