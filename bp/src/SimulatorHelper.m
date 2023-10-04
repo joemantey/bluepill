@@ -68,7 +68,7 @@
     NSString *hostAppPath = [hostAppExecPath stringByDeletingLastPathComponent];
     NSString *testSimulatorFrameworkPath = [hostAppPath stringByDeletingLastPathComponent];
     NSString *libXCTestBundleInjectPath = [[hostAppPath stringByAppendingPathComponent:@"Frameworks"] stringByAppendingPathComponent:@"libXCTestBundleInject.dylib"];
-    NSString *libXCTestBundleInjectValue = libXCTestBundleInjectPath;
+    NSString *libXCTestBundleInjectValue = [NSFileManager.defaultManager fileExistsAtPath:libXCTestBundleInjectPath] ? libXCTestBundleInjectPath : @"";
     if (![NSFileManager.defaultManager fileExistsAtPath:libXCTestBundleInjectPath]) {
         [BPUtils printInfo:DEBUGINFO withString:@"Not injecting libXCTestBundleInject dylib because it was not found in the app host bundle at path: %@", libXCTestBundleInjectValue];
         libXCTestBundleInjectValue = @"";
